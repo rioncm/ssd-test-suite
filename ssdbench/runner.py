@@ -33,12 +33,14 @@ def required(args):
 
 
 def smart(device, *options):
-    code, out, err = command(['smartctl', '-j', *options, device])
+    code, out, err = command(['smartctl', '--json=o', *options, device])
     try:
         data = json.loads(out)
     except ValueError as exc:
         raise RuntimeError(f'smartctl returned no JSON: {err or out}') from exc
     data.setdefault('smartctl', {})['exit_status'] = code
+    if err:
+        data['ssdbench_stderr'] = err
     return data
 
 
@@ -130,14 +132,54 @@ class Bench:
 
     def sample(self, force=False):
         if not force and time.monotonic()-self.last_temperature<30: return
-        data=smart(self.args.device,'-a')
+        data=smart(self.args.device,'-A')
         self.last_temperature=time.monotonic()
+        self.record_temperature(data)
+
+    def record_temperature(self, data, enforce=True):
         temp=data.get('temperature',{}).get('current')
         with (self.run/'temperature.csv').open('a') as f:
             csv.writer(f).writerow([time.time(),temp if temp is not None else ''])
-        if temp is not None and temp>=self.args.max_temperature:
+        if enforce and temp is not None and temp>=self.args.max_temperature:
             self.s['reviews'].append(f'Temperature {temp} °C reached configured stop limit {self.args.max_temperature} °C.')
             raise RuntimeError('Temperature limit reached.')
+
+    def snapshot(self, label):
+        """Keep extended evidence; independently verify essential data on bit 2."""
+        data=smart(self.args.device,'-x')
+        save(self.run/f'smart-{label}.json',data)
+        # Keep known health findings even if a separate query also failed.
+        failures,reviews=health(self.before,data)
+        self.s['failures']+=failures
+        self.s['reviews']+=reviews
+        self.record_temperature(data,enforce=label=='before')
+        code=data['smartctl']['exit_status']
+        if code & 3:
+            raise RuntimeError(f'{label} SMART invocation/device-open failed (status {code}).')
+        serial=data.get('serial_number','').strip()
+        if serial and serial!=self.s['serial']:
+            raise RuntimeError('SMART serial does not match lsblk serial.')
+        if code & 4:
+            save(self.run/f'smart-{label}-extended.json',data)
+            data=smart(self.args.device,'-i','-H','-A','-c')
+            save(self.run/f'smart-{label}-core.json',data)
+            failures,reviews=health(self.before,data)
+            self.s['failures']+=failures
+            self.s['reviews']+=reviews
+            self.record_temperature(data,enforce=label=='before')
+            if data['smartctl']['exit_status'] & 7:
+                raise RuntimeError(f'{label} essential SMART query failed; see smart-{label}-core.json.')
+            # Never treat a successful exit with missing data as a usable baseline.
+            if (not isinstance(data.get('smart_status',{}).get('passed'),bool)
+                    or not data.get('ata_smart_attributes',{}).get('table')
+                    or not data.get('ata_smart_data',{})):
+                raise RuntimeError(f'{label} essential SMART data incomplete; see smart-{label}-core.json.')
+            self.s['reviews'].append(f'{label}: extended SMART query returned bit 2; essential SMART query succeeded. Extended evidence remains incomplete.')
+        if data.get('serial_number','').strip()!=self.s['serial']:
+            raise RuntimeError('SMART serial does not match lsblk serial.')
+        # Canonical snapshot is the selected successful query; raw attempts remain separate.
+        save(self.run/f'smart-{label}.json',data)
+        return data
 
     def selftest(self, kind):
         self.identity()
@@ -235,15 +277,11 @@ class Bench:
         self.checkpoint()
         (self.run/'temperature.csv').write_text('epoch,celsius\n')
         try:
-            self.before=smart(self.args.device,'-x')
-            save(self.run/'smart-before.json',self.before)
-            if self.before['smartctl']['exit_status']&7: raise RuntimeError('Baseline SMART access failed.')
-            if self.before.get('serial_number','').strip()!=self.s['serial']:
-                raise RuntimeError('SMART serial does not match lsblk serial.')
+            self.before=self.snapshot('before')
             failures,reviews=health(self.before,self.before)
             self.s['failures']+=failures
             self.s['reviews']+=reviews
-            if failures: raise RuntimeError('Baseline SMART health failed; no workload started.')
+            if self.s['failures']: raise RuntimeError('Baseline SMART health failed; no workload started.')
             self.sample(force=True)
             for kind in ('short','long'): self.selftest(kind)
             for name,options in workloads(self.profile,int(self.node['size']),int(self.node['log-sec'])):
@@ -257,7 +295,7 @@ class Bench:
         finally:
             self.stop()
             try:
-                after=smart(self.args.device,'-x'); save(self.run/'smart-after.json',after)
+                after=self.snapshot('after')
                 failures,reviews=health(self.before,after)
                 self.s['failures']+=failures; self.s['reviews']+=reviews
             except Exception as exc: self.s['reviews'].append(f'Final SMART unavailable: {exc}')
@@ -271,7 +309,7 @@ class Bench:
             elif any(word in out.lower() for word in ('i/o error','hard resetting link','failed command','link is slow','exception emask')):
                 self.s['reviews'].append('Kernel storage errors/resets found; inspect kernel.log (includes all devices).')
             if not any(row.split(',')[1].strip() for row in (self.run/'temperature.csv').read_text().splitlines()[1:]):
-                self.s['reviews'].append('Temperature unavailable.')
+                self.s['reviews'].append('No valid temperature reading was collected; monitoring may not have started.')
             self.s['failures']=list(dict.fromkeys(self.s['failures']))
             self.s['reviews']=list(dict.fromkeys(self.s['reviews']))
             self.s['finished']=dt.datetime.now(dt.timezone.utc).isoformat()

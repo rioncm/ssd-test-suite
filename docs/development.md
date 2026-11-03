@@ -69,3 +69,9 @@ python3 tests/check_install.py dist/ssdbench-0.2.0-py3-none-any.whl
 ```
 
 This check creates and removes its own temporary environment and uses only the supplied local wheel. It runs no disk-testing commands.
+
+## 0.2.1 SMART compatibility fix
+
+A supplied Micron ATA report contained valid health/attributes and a 39 °C temperature but returned extended-query status 4 without a diagnostic message. The runner now preserves extended evidence, performs an independent essential-data fallback for bit 2, retains REVIEW, and keeps temperature readings even if a run stops early. Invocation/device-open errors, incomplete fallback data, identity mismatches, and health failures remain blocking. SMART calls retain original plaintext and stderr.
+
+All 48 offline tests pass, including fallback regression cases. The wheel installation check also passes. Live testing of the fallback on the station remains pending; the exact extended-query failure cannot be inferred from the supplied structured JSON alone.

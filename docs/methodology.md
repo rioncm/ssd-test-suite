@@ -9,7 +9,7 @@
 5. Run sequential read (and write in full mode), random read QD1/QD32, and random write QD1/QD32 in full mode.
 6. Capture final SMART and the run's kernel-log interval; write final summaries and the catalog.
 
-Unsupported SMART self-tests are explicitly recorded and force REVIEW if the remaining run completes. A command failure or unverified self-test completion stops the run. Pre-existing active self-tests are not replaced.
+Unsupported SMART self-tests are explicitly recorded and force REVIEW if the remaining run completes. An essential SMART query failure or unverified self-test completion stops the run. Extended snapshots with exit bit 2 can fall back to a separate essential-data query; the original error remains a REVIEW finding. Invocation/device-open errors do not fall back. Pre-existing active self-tests are not replaced.
 
 ## Integrity
 

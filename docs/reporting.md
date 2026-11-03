@@ -28,6 +28,8 @@ Store results on a separate internal or network filesystem, never on the drive u
         ...
 ```
 
+Extended-query fallback adds `smart-before-extended.json` and `smart-before-core.json` (and corresponding after files), preserving both attempts. Selected successful snapshots remain in the canonical before/after files. SMART JSON includes original plaintext in `smartctl.output` for diagnosing errors that structured fields do not identify.
+
 Files for stages that did not start will be absent. Self-test result files contain the most recent poll, not every poll. `summary.json` is authoritative for completion and stage status; a partial fio JSON file alone is not a passing test.
 
 ## HTML and CSV

@@ -16,7 +16,13 @@ Update to version 0.1.1 or later and rerun the same command. The runner now read
 
 ## SMART problems
 
-Raw SMART command return codes are bitmasks, not ordinary success/failure codes. The runner distinguishes low-bit command errors from health/log findings. Inspect the saved JSON `smartctl` section.
+Raw SMART command return codes are bitmasks, not ordinary success/failure codes. Inspect the saved JSON `smartctl` section, including `smartctl.output` (original plaintext) and `ssdbench_stderr` when present.
+
+Version 0.2.1 distinguishes invocation/device-open errors (bits 0–1) from query/data-integrity errors (bit 2). If `smartctl -x` returns bit 2 without bits 0–1, it saves the extended attempt and independently queries identity, health, attributes, and capabilities using `-i -H -A -c`. Testing continues only if this essential query has no low-bit errors, includes the required data, and matches the selected serial. A health failure still stops the run. Successful fallback retains REVIEW because the extended evidence is incomplete; status 4 alone is not proof that the query was merely unsupported.
+
+For fallback runs, compare `smart-before-extended.json` with `smart-before-core.json` (and the corresponding `after` files). The canonical `smart-before.json`/`smart-after.json` contains the selected successful snapshot. The exact extended-query cause may only be visible in the retained plaintext.
+
+Temperature is recorded from baseline/final snapshots as well as periodic attribute queries. An early stop no longer discards a temperature already returned by the drive. If no valid reading was collected, the finding explicitly acknowledges that monitoring may not have started.
 
 Unsupported self-tests produce REVIEW after the I/O stages complete. A self-test already running prevents a new run. An accepted test that aborts, times out, or cannot prove completion produces INCOMPLETE. If a test is interrupted by the runner, it requests `smartctl -X`; inspect `smart-abort.json` if present.
 

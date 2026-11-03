@@ -1,7 +1,7 @@
 """Pure validation, workload construction, and result classification."""
 import re
 
-VERSION = '0.2.0'
+VERSION = '0.2.1'
 
 
 def walk(node):
@@ -83,8 +83,10 @@ def health(before, after):
             if isinstance(value, int) and value > 0:
                 review.append(f"SMART {key} {attr.get('name')}: {prior} → {value}; interpret for this model.")
     code = after.get('smartctl', {}).get('exit_status', 0)
-    if code & 0b111:
-        review.append('SMART command/access error; evidence may be incomplete.')
+    if code & 0b11:
+        review.append('SMART invocation/device-open error; evidence may be incomplete.')
+    if code & 0b100:
+        review.append('SMART query/data-integrity error (exit bit 2); inspect saved SMART output.')
     if code & 0b11110000:
         review.append('SMART reports historical threshold, error-log, or self-test findings.')
     return fail, review
