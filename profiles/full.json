@@ -1,0 +1,1 @@
+{"version":"1.0.0","mode":"full","seconds":60,"idle_seconds":10,"description":"Destructive full-capacity CRC32C write/read verification, followed by bounded read/write benchmarks."}

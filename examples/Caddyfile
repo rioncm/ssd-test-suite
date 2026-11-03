@@ -1,0 +1,8 @@
+# Localhost-only default. For LAN access use :8080 and remove the bind directive.
+# Apply network access controls before exposing operational reports.
+http://localhost:8080 {
+    bind 127.0.0.1
+    root * /srv/ssd-results
+    encode gzip
+    file_server
+}
