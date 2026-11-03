@@ -3,11 +3,11 @@ import argparse
 import csv
 import datetime as dt
 import fcntl
-import hashlib
 import json
 import os
 from pathlib import Path
 import platform
+import re
 import signal
 import stat
 import subprocess
@@ -17,8 +17,7 @@ import uuid
 
 from .core import VERSION, validate_disk, workloads, fio_args, health, outcome, slug, walk
 from .report import save, report, index
-
-BASE = Path(__file__).resolve().parent.parent
+from .resources import load_profile, source_hashes
 
 
 def command(args, timeout=60):
@@ -43,6 +42,32 @@ def smart(device, *options):
     return data
 
 
+def active_swap_ids():
+    """Read kernel swap inventory without relying on swapon output options.
+
+    /proc paths use octal escapes. Decode once, preserving filesystem bytes.
+    An unreadable inventory or unresolvable entry must stop preflight.
+    """
+    lines = Path('/proc/swaps').read_bytes().splitlines()
+    if not lines or lines[0].split() != [b'Filename', b'Type', b'Size', b'Used', b'Priority']:
+        raise ValueError('Cannot validate /proc/swaps header.')
+    busy = set()
+    for line in lines[1:]:
+        fields = line.split()
+        if len(fields) != 5 or fields[1] not in (b'file', b'partition'):
+            raise ValueError('Cannot parse active swap entry in /proc/swaps.')
+        raw_path = re.sub(rb'\\([0-7]{3})', lambda m: bytes([int(m[1], 8)]), fields[0])
+        path = Path(os.fsdecode(raw_path))
+        if not path.is_absolute():
+            raise ValueError('Active swap path is not absolute.')
+        st = path.stat()
+        if not (stat.S_ISBLK(st.st_mode) or stat.S_ISREG(st.st_mode)):
+            raise ValueError(f'Unexpected active swap file type: {path}')
+        number = st.st_rdev if stat.S_ISBLK(st.st_mode) else st.st_dev
+        busy.add(f'{os.major(number)}:{os.minor(number)}')
+    return busy
+
+
 def inspect(device, root):
     if not device.startswith('/dev/disk/by-id/') or Path(device).parent != Path('/dev/disk/by-id'):
         raise ValueError('Use a whole-disk /dev/disk/by-id/ path.')
@@ -58,11 +83,7 @@ def inspect(device, root):
     # All mounted devices, including root and the results destination. lsblk supplies descendants.
     mounts=json.loads(required(['findmnt','--json','--output','MAJ:MIN']))
     busy={x['maj:min'] for top in mounts.get('filesystems',[]) for x in walk(top)}
-    swaps=json.loads(required(['swapon','--show','--json','--output','NAME']))
-    for swap in swaps.get('swapdevices',[]):
-        p=Path(swap['name']); st=p.stat()
-        number=st.st_rdev if stat.S_ISBLK(st.st_mode) else st.st_dev
-        busy.add(f'{os.major(number)}:{os.minor(number)}')
+    busy.update(active_swap_ids())
     dest=root.resolve()
     while not dest.exists(): dest=dest.parent
     dev=dest.stat().st_dev
@@ -259,7 +280,8 @@ class Bench:
 
 
 def main():
-    p=argparse.ArgumentParser(description='Repeatable SATA SSD testing and static reports')
+    p=argparse.ArgumentParser(prog='ssdbench', description='Repeatable SATA SSD testing and static reports')
+    p.add_argument('--version', action='version', version=f'%(prog)s {VERSION}')
     sub=p.add_subparsers(dest='action',required=True)
     sub.add_parser('list',help='List disks and stable IDs without testing')
     for name in ('plan','run'):
@@ -287,7 +309,7 @@ def main():
     args.results=args.results.resolve()
     if args.max_temperature<1 or args.selftest_timeout<1: p.error('Limits must be positive.')
     try:
-        profile=json.loads((BASE/'profiles'/f'{args.profile}.json').read_text())
+        profile=load_profile(args.profile)
         node=inspect(args.device,args.results)
         print(json.dumps({'target':node,'profile':profile,'workloads':list(workloads(profile,int(node['size']),int(node['log-sec'])))},indent=2))
         if args.action=='plan': return
@@ -306,8 +328,7 @@ def main():
                 raise ValueError('Serial changed during preflight.')
             run=args.results/slug(node['serial'].strip())/(dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'_'+args.profile+'_'+uuid.uuid4().hex[:8])
             (run/'fio').mkdir(parents=True)
-            source_hashes={str(x.relative_to(BASE)):hashlib.sha256(x.read_bytes()).hexdigest() for x in list((BASE/'ssdbench').glob('*.py'))+list((BASE/'profiles').glob('*.json'))}
-            save(run/'manifest.json',{'suite_version':VERSION,'profile':profile,'target':node,'kernel':platform.release(),'platform':platform.platform(),'fio':required(['fio','--version']).strip(),'smartctl':required(['smartctl','--version']),'source_sha256':source_hashes,'max_temperature':args.max_temperature,'selftest_timeout_minutes':args.selftest_timeout})
+            save(run/'manifest.json',{'suite_version':VERSION,'profile':profile,'target':node,'kernel':platform.release(),'platform':platform.platform(),'fio':required(['fio','--version']).strip(),'smartctl':required(['smartctl','--version']),'source_sha256':source_hashes(),'max_temperature':args.max_temperature,'selftest_timeout_minutes':args.selftest_timeout})
             def interrupt(signum, frame): raise KeyboardInterrupt(f'Signal {signum}')
             signal.signal(signal.SIGTERM,interrupt)
             bench=Bench(args,node,profile,run)

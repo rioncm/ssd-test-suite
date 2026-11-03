@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ssdbench"
+dynamic = ["version"]
+description = "SATA SSD qualification with SMART, fio, and static evidence reports"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+classifiers = [
+    "Environment :: Console",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+ssdbench = "ssdbench.runner:main"
+
+[tool.setuptools]
+packages = ["ssdbench", "ssdbench.profiles"]
+
+[tool.setuptools.dynamic]
+version = {attr = "ssdbench.core.VERSION"}
+
+[tool.setuptools.package-data]
+ssdbench = ["profiles/*.json"]

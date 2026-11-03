@@ -21,7 +21,7 @@ No TRIM, secure erase, firmware changes, or cache settings are applied. A write-
 
 ## Performance
 
-Profiles are versioned JSON in `profiles/`. Both use Linux libaio, direct I/O, one job, a fixed random seed, and a ten-second idle interval after each fio workload. Each timed workload runs for sixty seconds with no excluded warm-up interval.
+Profiles are versioned JSON in `ssdbench/profiles/`. Both use Linux libaio, direct I/O, one job, a fixed random seed, and a ten-second idle interval after each fio workload. Each timed workload runs for sixty seconds with no excluded warm-up interval.
 
 | Workload | Block size | Queue depth | Profiles |
 |---|---|---|---|
@@ -44,7 +44,7 @@ Temperature is sampled approximately every thirty seconds, including during fio 
 
 At 400 MB/s, a 1 TB write plus read has a theoretical I/O floor of roughly 83 minutes, before self-tests, cache slowdown, and other overhead. The six performance jobs add roughly seven minutes including idle intervals. Actual duration can be much longer.
 
-Editing a profile changes comparability. Increment its version and archive the old file. Every run saves the profile, exact generated commands, and SHA-256 hashes of source/profile files. Never edit settings during an active run.
+For an installed copy, edit profiles in the source checkout and reinstall the package before testing. Editing a profile changes comparability. Increment its version and archive the old file. Every run saves the profile, exact generated commands, and SHA-256 hashes of source/profile files. Never edit settings during an active run.
 
 ## References
 

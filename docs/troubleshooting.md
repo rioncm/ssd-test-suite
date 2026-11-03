@@ -2,13 +2,17 @@
 
 ## Target rejected
 
-Use `python3 -m ssdbench list` and select a whole-disk `/dev/disk/by-id/ata-...` ID. The first version intentionally rejects USB/NVMe and disks without a serial or SSD rotational classification. Do not bypass this by changing the code's safety checks.
+Use `ssdbench list` and select a whole-disk `/dev/disk/by-id/ata-...` ID. The first version intentionally rejects USB/NVMe and disks without a serial or SSD rotational classification. Do not bypass this by changing the code's safety checks.
 
 A mounted partition, active swap, LVM/RAID/device-mapper holder, or results filesystem on the target prevents testing. Inspect `lsblk` and your storage configuration. The runner never automatically unmounts, stops arrays, disables swap, or tears down mappings. Resolve usage deliberately and rerun `plan`.
 
 Storage-member signatures (ZFS, Btrfs, Linux RAID, LVM, bcache, Ceph) are rejected even when apparently inactive, because some pools do not expose ordinary kernel holders. Any decommissioning and metadata removal must be done separately after verifying the device is no longer in use.
 
 Both profiles require unused disks, including read-only screening. A disk with unavailable system usage evidence fails preflight rather than being assumed safe.
+
+## Older suite reports `swapon: unrecognized option --json`
+
+Update to version 0.1.1 or later and rerun the same command. The runner now reads the kernel inventory at `/proc/swaps` directly; no package upgrade or swap deactivation is needed. Check the installed project version with `ssdbench --version`.
 
 ## SMART problems
 
@@ -34,4 +38,4 @@ The default stop threshold is 70 °C, an operator policy rather than a universal
 
 ## Reports
 
-Rebuild with `python3 -m ssdbench report --results PATH` when no run is active. A failed rebuild cannot establish that a run passed: inspect its summary and original logs. JSON/HTML files use atomic replacement at checkpoints, but the entire result directory is not a transactional snapshot.
+Rebuild with `ssdbench report --results PATH` when no run is active. A failed rebuild cannot establish that a run passed: inspect its summary and original logs. JSON/HTML files use atomic replacement at checkpoints, but the entire result directory is not a transactional snapshot.

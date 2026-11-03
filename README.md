@@ -8,20 +8,36 @@ A command-line SATA SSD qualification suite for Ubuntu Server 24.04. It runs SMA
 
 Copy this project to your Ubuntu station, then enter its directory. Use Python 3.10 or later (Ubuntu 24.04 includes Python 3.12).
 
+Install into a dedicated environment and expose the command system-wide:
+
 ```bash
 sudo apt update
-sudo apt install python3 fio smartmontools util-linux tmux
+sudo apt install python3 python3-venv fio smartmontools util-linux tmux
+sudo python3 -m venv /opt/ssdbench
+sudo /opt/ssdbench/bin/python -m pip install .
+sudo ln -s /opt/ssdbench/bin/ssdbench /usr/local/bin/ssdbench
 sudo install -d -m 0755 /srv/ssd-results
-python3 -m ssdbench --help
+ssdbench --version
 ```
 
-If APT cannot locate `fio`, enable Universe with `sudo add-apt-repository universe`, update APT, and retry. No pip installation is needed. Keep the `ssdbench` and `profiles` directories together. Run commands below from the project directory.
+The install copies the Python package and its test profiles into `/opt/ssdbench`; it does not require the checkout at runtime. Run `ssdbench` from any directory. The dedicated environment avoids changing Ubuntu's system Python packages and works with `sudo ssdbench`. Initial builds download setuptools from the configured Python package index; runtime has no third-party Python dependencies.
+
+If APT cannot locate `fio`, enable Universe with `sudo add-apt-repository universe`, update APT, and retry. If `/usr/local/bin/ssdbench` already exists, inspect it before creating the link; do not overwrite an unrelated executable. If sudo's PATH omits `/usr/local/bin`, use `sudo /usr/local/bin/ssdbench`.
+
+To upgrade from an updated checkout, with no suite running:
+
+```bash
+sudo /opt/ssdbench/bin/python -m pip install --upgrade .
+ssdbench --version
+```
+
+The symlink only needs to be created once. Source/profile edits take effect after reinstalling. See [installation options](docs/installation.md) for wheels, development installs, and removal.
 
 ## Identify and preview
 
 ```bash
-python3 -m ssdbench list
-sudo python3 -m ssdbench plan \
+ssdbench list
+sudo ssdbench plan \
   --device /dev/disk/by-id/ata-YOUR_MODEL_YOUR_SERIAL \
   --profile screen
 ```
@@ -41,7 +57,7 @@ tmux new -s ssdbench
 Then run:
 
 ```bash
-sudo python3 -m ssdbench run \
+sudo ssdbench run \
   --device /dev/disk/by-id/ata-YOUR_MODEL_YOUR_SERIAL \
   --profile screen \
   --results /srv/ssd-results
@@ -54,7 +70,7 @@ Detach with **Ctrl+B, then D**; reconnect with `tmux attach -t ssdbench`. The ru
 Preview first with `plan --profile full`. After confirming the selected SSD is expendable:
 
 ```bash
-sudo python3 -m ssdbench run \
+sudo ssdbench run \
   --device /dev/disk/by-id/ata-YOUR_MODEL_YOUR_SERIAL \
   --profile full \
   --confirm-erase YOUR_SERIAL \
@@ -79,6 +95,7 @@ An interrupted run with a proven failure remains FAIL. Ordinary fio I/O errors p
 
 ## Documentation
 
+- [Installation and upgrades](docs/installation.md)
 - [Test methodology and profile settings](docs/methodology.md)
 - [Report format and interpretation](docs/reporting.md)
 - [Caddy setup](docs/caddy.md)

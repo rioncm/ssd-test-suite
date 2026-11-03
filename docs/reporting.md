@@ -47,7 +47,7 @@ A CRC/link finding is not automatically a failed SSD. Check the cable, power, an
 ## Rebuild
 
 ```bash
-python3 -m ssdbench report --results /srv/ssd-results
+ssdbench report --results /srv/ssd-results
 ```
 
 This regenerates HTML and CSV from existing evidence without accessing disks or changing verdicts. Use an account with write permission to the result directory; results created by the runner are normally root-owned. Run rebuilds only when no test is writing to the same tree.
